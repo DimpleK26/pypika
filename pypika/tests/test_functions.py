@@ -12,7 +12,7 @@ from pypika import (
     VerticaQuery,
     functions as fn,
 )
-from pypika.enums import SqlTypes, Dialects
+from pypika.enums import Dialects, SqlTypes
 
 __author__ = "Timothy Heys"
 __email__ = "theys@kayak.com"
@@ -24,6 +24,15 @@ class FunctionTests(unittest.TestCase):
         self.assertEqual(
             "func(ARRAY['a'],ARRAY['b'])", func.get_sql(dialect=Dialects.POSTGRESQL)
         )
+
+    def test_is_aggregate_None_for_non_aggregate_function_or_function_with_no_aggregate_functions(self):
+        self.assertIsNone(fn.Coalesce('a', 0).is_aggregate)
+        self.assertIsNone(fn.Coalesce(fn.NullIf('a', 0), 0).is_aggregate)
+
+    def test_is_aggregate_True_for_aggregate_function_or_function_with_aggregate_functions(self):
+        self.assertTrue(fn.Sum('a').is_aggregate)
+        self.assertTrue(fn.Coalesce(fn.Avg('a'), 0).is_aggregate)
+        self.assertTrue(fn.Coalesce(fn.NullIf(fn.Sum('a'), 0), 0).is_aggregate)
 
 
 class SchemaTests(unittest.TestCase):
@@ -561,6 +570,7 @@ class CastTests(unittest.TestCase):
 class DateFunctionsTests(unittest.TestCase):
     dt = F("dt")
     t = T("abc")
+    t2 = T("efg")
 
     def _test_extract_datepart(self, date_part):
         q = Q.from_(self.t).select(fn.Extract(date_part, self.t.foo))
@@ -595,6 +605,20 @@ class DateFunctionsTests(unittest.TestCase):
 
     def test_extract_year(self):
         self._test_extract_datepart(DatePart.year)
+
+    def test_extract_join(self):
+        q = (
+            Q.from_(self.t)
+            .join(self.t2)
+            .on(self.t.id == self.t2.t_id)
+            .select(fn.Extract(DatePart.year, self.t.foo))
+        )
+
+        self.assertEqual(
+            'SELECT EXTRACT(YEAR FROM "abc"."foo") FROM "abc" '
+            'JOIN "efg" ON "abc"."id"="efg"."t_id"',
+            str(q)
+        )
 
     def test_timestampadd(self):
         a = fn.TimestampAdd("year", 1, "2017-10-01")

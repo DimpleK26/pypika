@@ -88,10 +88,10 @@ from pypika.utils import (
     JoinException,
     QueryException,
     RollupException,
-    UnionException,
+    SetOperationException,
     FunctionException,
 )
 
 __author__ = "Timothy Heys"
 __email__ = "theys@kayak.com"
-__version__ = "0.37.7"
+__version__ = "0.37.16"

@@ -3,12 +3,13 @@ import unittest
 from pypika import (
     Array,
     Bracket,
-    PostgreSQLQuery,
     Query,
     Table,
     Tables,
     Tuple,
 )
+from pypika.functions import Coalesce, NullIf, Sum
+from pypika.terms import Field
 
 
 class TupleTests(unittest.TestCase):
@@ -123,6 +124,27 @@ class TupleTests(unittest.TestCase):
 
         q = Query.from_(tb).select(Tuple(tb.col).as_("different_name"))
         self.assertEqual(str(q), 'SELECT ("col") "different_name" FROM "tb"')
+
+    def test_tuple_is_aggregate(self):
+        with self.subTest('None if single argument returns None for is_aggregate'):
+            self.assertEqual(None, Tuple(0).is_aggregate)
+            self.assertEqual(None, Tuple(Coalesce('col')).is_aggregate)
+
+        with self.subTest('None if multiple arguments all return None for is_aggregate'):
+            self.assertEqual(None, Tuple(0, 'a').is_aggregate)
+            self.assertEqual(None, Tuple(Coalesce('col'), NullIf('col2', 0)).is_aggregate)
+
+        with self.subTest('True if single argument returns True for is_aggregate'):
+            self.assertEqual(True, Tuple(Sum('col')).is_aggregate)
+
+        with self.subTest('True if multiple arguments return True for is_aggregate'):
+            self.assertEqual(True, Tuple(Sum('col'), Sum('col2')).is_aggregate)
+
+        with self.subTest('True when mix of arguments returning None and True for is_aggregate'):
+            self.assertEqual(True, Tuple(Coalesce('col'), Coalesce('col2', 0), Sum('col3')).is_aggregate)
+
+        with self.subTest('False when one of the arguments returns False for is_aggregate'):
+            self.assertEqual(False, Tuple(Field('col1'), Sum('col2')).is_aggregate)
 
 
 class ArrayTests(unittest.TestCase):

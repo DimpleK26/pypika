@@ -454,6 +454,9 @@ class EmptyCriterion:
     is_aggregate = None
     tables_ = set()
 
+    def fields_(self) -> Set["Field"]:
+        return set()
+
     def __and__(self, other: Any) -> Any:
         return other
 
@@ -462,7 +465,6 @@ class EmptyCriterion:
 
     def __xor__(self, other: Any) -> Any:
         return other
-
 
 
 class Field(Criterion, JSON):
@@ -509,7 +511,6 @@ class Field(Criterion, JSON):
             return format_alias_sql(
                   field_sql, field_alias, quote_char=quote_char, **kwargs
             )
-
         return field_sql
 
 
@@ -555,7 +556,7 @@ class Tuple(Criterion):
 
     @property
     def is_aggregate(self) -> bool:
-        return all([value.is_aggregate for value in self.values])
+        return resolve_is_aggregate([val.is_aggregate for val in self.values])
 
     @builder
     def replace_table(self, current_table: Optional["Table"], new_table: Optional["Table"]) -> "Tuple":
@@ -974,9 +975,9 @@ class Case(Term):
 
     @property
     def is_aggregate(self) -> Optional[bool]:
-        # True if all cases are True or None. None all cases are None. Otherwise, False
+        # True if all criterions/cases are True or None. None all cases are None. Otherwise, False
         return resolve_is_aggregate(
-              [term.is_aggregate for _, term in self._cases]
+              [criterion.is_aggregate or term.is_aggregate for criterion, term in self._cases]
               + [self._else.is_aggregate if self._else else None]
         )
 
@@ -1129,7 +1130,7 @@ class Function(Criterion):
         :returns:
             True if the function accepts one argument and that argument is aggregate.
         """
-        return len(self.args) == 1 and self.args[0].is_aggregate
+        return resolve_is_aggregate([arg.is_aggregate for arg in self.args])
 
     @builder
     def replace_table(self, current_table: Optional["Table"], new_table: Optional["Table"]) -> "Function":
@@ -1469,3 +1470,27 @@ class PseudoColumn(Term):
 
     def get_sql(self, **kwargs: Any) -> str:
         return self.name
+
+
+class AtTimezone(Term):
+    """
+    Generates AT TIME ZONE SQL.
+    Examples:
+        AT TIME ZONE 'US/Eastern'
+        AT TIME ZONE INTERVAL '-06:00'
+    """
+    is_aggregate = None
+
+    def __init__(self, field, zone, interval=False, alias=None):
+        super().__init__(alias)
+        self.field = Field(field) if not isinstance(field, Field) else field
+        self.zone = zone
+        self.interval = interval
+
+    def get_sql(self, **kwargs):
+        sql = '{name} AT TIME ZONE {interval}\'{zone}\''.format(
+            name=self.field.get_sql(**kwargs),
+            interval='INTERVAL ' if self.interval else '',
+            zone=self.zone,
+        )
+        return format_alias_sql(sql, self.alias, **kwargs)

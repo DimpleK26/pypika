@@ -27,6 +27,7 @@ from pypika.utils import (
 class SnowFlakeQueryBuilder(QueryBuilder):
     QUOTE_CHAR = None
     ALIAS_QUOTE_CHAR = '"'
+    QUERY_ALIAS_QUOTE_CHAR = ''
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(
@@ -49,7 +50,7 @@ class MySQLQueryBuilder(QueryBuilder):
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(
-              dialect=Dialects.MYSQL, wrap_union_queries=False, **kwargs
+              dialect=Dialects.MYSQL, wrap_set_operation_queries=False, **kwargs
         )
         self._duplicate_updates = []
         self._ignore_duplicates = False
@@ -528,15 +529,13 @@ class PostgreQueryBuilder(QueryBuilder):
         querystring = super(PostgreQueryBuilder, self).get_sql(
               with_alias, subquery, **kwargs
         )
-        with_namespace = False
-        if self._update_table and self.from_:
-            with_namespace = True
 
         querystring += self._on_conflict_sql(**kwargs)
         querystring += self._on_conflict_action_sql(**kwargs)
 
         if self._returns:
-            querystring += self._returning_sql(with_namespace=with_namespace, **kwargs)
+            kwargs['with_namespace'] = self._update_table and self.from_
+            querystring += self._returning_sql(**kwargs)
         return querystring
 
 
@@ -617,7 +616,7 @@ class ClickHouseQuery(Query):
     """
     @classmethod
     def _builder(cls, **kwargs: Any) -> QueryBuilder:
-        return QueryBuilder(dialect=Dialects.CLICKHOUSE, wrap_union_queries=False, as_keyword=True, **kwargs)
+        return QueryBuilder(dialect=Dialects.CLICKHOUSE, wrap_set_operation_queries=False, as_keyword=True, **kwargs)
 
 
 class SQLLiteValueWrapper(ValueWrapper):
